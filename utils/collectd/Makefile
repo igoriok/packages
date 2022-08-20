@@ -120,7 +120,6 @@ COLLECTD_PLUGINS_DISABLED:= \
 	write_kafka \
 	write_log \
 	write_mongodb \
-	write_prometheus \
 	write_redis \
 	write_riemann \
 	write_sensu \
@@ -207,12 +206,14 @@ COLLECTD_PLUGINS_SELECTED:= \
 	vmem \
 	wireless \
 	write_graphite \
-	write_http
+	write_http \
+	write_prometheus
 
 PKG_CONFIG_DEPENDS:= \
 	$(patsubst %,CONFIG_PACKAGE_collectd-mod-%,$(subst _,-,$(COLLECTD_PLUGINS_SELECTED))) \
 
 include $(INCLUDE_DIR)/package.mk
+include $(INCLUDE_DIR)/host-build.mk
 include $(INCLUDE_DIR)/kernel.mk
 # collectd-mod-mysql needs iconv
 include $(INCLUDE_DIR)/nls.mk
@@ -346,6 +347,14 @@ else
   CONFIGURE_ARGS+= --without-libudev
 endif
 
+# exception: mod-write-prometheus needs libmicrohttpd and libprotobuf-c
+ifneq ($(CONFIG_PACKAGE_collectd-mod-write-prometheus),)
+  CONFIGURE_ARGS+= \
+	--with-libmicrohttpd="$(STAGING_DIR)/usr" \
+	--with-libprotobuf-c="$(STAGING_DIR)/usr"
+  HOST_BUILD_DEPENDS+= protobuf-c-compiler/host
+endif
+
 define Package/collectd/conffiles
 /etc/collectd.conf
 /etc/config/collectd
@@ -386,10 +395,10 @@ define BuildPlugin
 			$(PKG_INSTALL_DIR)/usr/lib/collectd/$$$$$$$${m}.so \
 			$$(1)/usr/lib/collectd/ ; \
 	done
-	if [ -f ./files/usr/share/collectd/plugin/$(1).json ]; then \
+	if [ -f ./files/usr/share/collectd/plugin/$(3).json ]; then \
 		$(INSTALL_DIR) $$(1)/usr/share/collectd/plugin ; \
-		$(INSTALL_DATA) ./files/usr/share/collectd/plugin/$(1).json \
-			$$(1)/usr/share/collectd/plugin/$(1).json ; \
+		$(INSTALL_DATA) ./files/usr/share/collectd/plugin/$(3).json \
+			$$(1)/usr/share/collectd/plugin/$(3).json ; \
 	fi
   endef
 
@@ -412,10 +421,10 @@ define BuildScriptPlugin
 		${INSTALL_BIN} \
 			./files/exec-scripts/$$$$$$$${m}.sh $$(1)/usr/libexec/collectd/ ; \
 	done
-	if [ -f ./files/usr/share/collectd/plugin/$(1).json ]; then \
+	if [ -f ./files/usr/share/collectd/plugin/$(3).json ]; then \
 		$(INSTALL_DIR) $$(1)/usr/share/collectd/plugin ; \
-		$(INSTALL_DATA) ./files/usr/share/collectd/plugin/$(1).json \
-			$$(1)/usr/share/collectd/plugin/$(1).json ; \
+		$(INSTALL_DATA) ./files/usr/share/collectd/plugin/$(3).json \
+			$$(1)/usr/share/collectd/plugin/$(3).json ; \
 	fi
   endef
 
@@ -423,6 +432,7 @@ define BuildScriptPlugin
 
 endef
 
+$(eval $(call HostBuild))
 $(eval $(call BuildPackage,collectd))
 
 #$(eval $(call BuildPlugin,NAME,DESCRIPTION,FILES,DEPENDENCIES))
@@ -501,5 +511,6 @@ $(eval $(call BuildPlugin,vmem,virtual memory usage input,vmem,))
 $(eval $(call BuildPlugin,wireless,wireless status input,wireless,))
 $(eval $(call BuildPlugin,write-graphite,Carbon/Graphite output,write_graphite,+PACKAGE_collectd-mod-write-graphite:libpthread))
 $(eval $(call BuildPlugin,write-http,HTTP POST output,write_http,+PACKAGE_collectd-mod-write-http:libcurl))
+$(eval $(call BuildPlugin,write-prometheus,Prometheus output,write_prometheus,+PACKAGE_collectd-mod-write-prometheus:libmicrohttpd +PACKAGE_collectd-mod-write-prometheus:libprotobuf-c))
 
 $(eval $(call BuildScriptPlugin,sqm,SQM/qdisc collection,sqm_collectd,+PACKAGE_collectd-mod-sqm:collectd-mod-exec))
